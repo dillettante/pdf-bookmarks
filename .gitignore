@@ -1,0 +1,8 @@
+# compiled Vision helper (arch-specific; compiled on first --ocr vision use)
+scripts/visionbox
+__pycache__/
+*.pyc
+# OCR / bookmark outputs
+*_ocr.pdf
+*-marked.pdf
+.DS_Store
