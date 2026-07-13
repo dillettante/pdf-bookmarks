@@ -81,6 +81,7 @@ def _ocr_overlay_pdf(path, run_ocr, font, tag, dpi=220, jpg_quality=72):
         sys.exit(f"[OCR {tag}] 한글폰트 {font} 없음.")
     out_path = f"{os.path.splitext(path)[0]}_ocr.pdf"
     src, out = fitz.open(path), fitz.open()
+    total_boxes = 0   # 한 글자도 못 찾았는데 "완료"로 끝나는 것을 막기 위한 카운터
     print(f"[OCR {tag}] {src.page_count}쪽 OCR 중… (~{src.page_count * 0.9 / 60:.0f}분)")
     for i in range(src.page_count):
         pix = src[i].get_pixmap(dpi=dpi)
@@ -102,12 +103,19 @@ def _ocr_overlay_pdf(path, run_ocr, font, tag, dpi=220, jpg_quality=72):
             try:
                 p.insert_text((x, y + h * 0.85), b["t"], fontsize=max(4, h * 0.9),
                               fontname="ko", fontfile=font, render_mode=3)
+                total_boxes += 1
             except Exception:
                 pass
         if (i + 1) % 50 == 0:
             print(f"  … {i + 1}/{src.page_count}쪽")
+    # OCR 엔진이 글자를 하나도 못 찾아도 이미지만 든 PDF는 만들어진다.
+    # 그걸 "완료"로 반환하면 호출자가 빈 껍데기를 원본으로 덮어쓴다 → 여기서 끊는다.
+    if total_boxes == 0:
+        sys.exit(f"[OCR {tag}] 전 페이지에서 글자를 하나도 찾지 못했습니다. "
+                 f"결과 PDF를 만들지 않습니다(원본 보존). 다른 백엔드를 시도하세요.")
     out.save(out_path, deflate=True, garbage=4)
-    print(f"[OCR {tag}] 완료 → {out_path} ({os.path.getsize(out_path) // 1048576}MB)")
+    print(f"[OCR {tag}] 완료 → {out_path} "
+          f"({os.path.getsize(out_path) // 1048576}MB, 텍스트 {total_boxes}줄)")
     return out_path
 
 
