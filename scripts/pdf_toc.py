@@ -75,8 +75,21 @@ def _winocr_run(png):
     return r.stdout
 
 
+def _page_native_dpi(page):
+    """스캔 페이지를 채우는 최대 이미지의 픽셀수 ÷ 페이지 인치 = 원본 스캔 dpi(0=이미지 없음).
+    회전 무관하게 긴 변끼리 비교."""
+    pg_max_in = max(page.rect.width, page.rect.height) / 72.0
+    if pg_max_in <= 0:
+        return 0
+    best = 0.0
+    for img in page.get_images(full=True):
+        best = max(best, max(img[2], img[3]) / pg_max_in)  # img[2]=폭px, img[3]=높이px
+    return best
+
+
 def _ocr_overlay_pdf(path, run_ocr, font, tag, dpi=220, jpg_quality=72):
-    """공통: 각 페이지 렌더 → run_ocr(png)로 박스 얻기 → 이미지(JPEG)+투명텍스트로 검색가능 PDF 재구성."""
+    """공통: 각 페이지 렌더 → run_ocr(png)로 박스 얻기 → 이미지(JPEG)+투명텍스트로 검색가능 PDF 재구성.
+    dpi는 상한(cap). 원본 스캔 dpi가 더 낮으면 그 값으로 렌더 → 업스케일 방지(용량 절감, 정보손실 없음)."""
     if not os.path.exists(font):
         sys.exit(f"[OCR {tag}] 한글폰트 {font} 없음.")
     out_path = f"{os.path.splitext(path)[0]}_ocr.pdf"
@@ -84,7 +97,9 @@ def _ocr_overlay_pdf(path, run_ocr, font, tag, dpi=220, jpg_quality=72):
     total_boxes = 0   # 한 글자도 못 찾았는데 "완료"로 끝나는 것을 막기 위한 카운터
     print(f"[OCR {tag}] {src.page_count}쪽 OCR 중… (~{src.page_count * 0.9 / 60:.0f}분)")
     for i in range(src.page_count):
-        pix = src[i].get_pixmap(dpi=dpi)
+        native = _page_native_dpi(src[i])
+        rdpi = dpi if native <= 0 else min(dpi, max(72, round(native)))  # 상한=dpi, 업스케일 안 함
+        pix = src[i].get_pixmap(dpi=rdpi)
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
             png = tf.name
         pix.save(png)
@@ -92,7 +107,7 @@ def _ocr_overlay_pdf(path, run_ocr, font, tag, dpi=220, jpg_quality=72):
             stdout = run_ocr(png)
         finally:
             os.remove(png)
-        W, H = pix.width * 72 / dpi, pix.height * 72 / dpi
+        W, H = pix.width * 72 / rdpi, pix.height * 72 / rdpi
         p = out.new_page(width=W, height=H)
         p.insert_image(p.rect, stream=pix.tobytes("jpg", jpg_quality=jpg_quality))  # JPEG 압축(무압축시 GB급 폭증)
         for line in stdout.splitlines():

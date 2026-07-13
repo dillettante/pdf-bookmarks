@@ -74,6 +74,8 @@ python3 scripts/pdf_toc.py extract book.pdf --ocr vision   # macOS  (or --ocr wi
 ## Notes
 
 - Output is always a **new `-marked.pdf`** — the original is never modified. (In-place edits inside cloud-synced folders — Google Drive/Dropbox/iCloud/OneDrive — get reverted by the sync client, so a new file is used.)
+- OCR (`--ocr auto`/`vision`/`winocr`) writes a searchable **`<name>_ocr.pdf`** next to the input as an intermediate (also a new file — safe in cloud folders; it's an extra artifact, not an overwrite). Bookmark that to get `<name>_ocr-marked.pdf`.
+- `vision`/`winocr` re-render each page but **cap render DPI at the source scan's native DPI** (never upscale), so low-DPI scans don't balloon in size. OCR aborts (without writing output) if it finds zero text, rather than producing an empty text layer.
 - The compiled `scripts/visionbox` binary is not committed; it is compiled on first `--ocr vision` use.
 
 ## License
