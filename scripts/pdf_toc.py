@@ -503,7 +503,7 @@ def main():
                    help="뷰어 페이지번호를 책 인쇄쪽번호에 맞춤(오프셋 자동감지)")
     a.add_argument("--label-offset", help="페이지라벨 오프셋 수동지정(PDF−인쇄). 미지정 시 자동감지")
     add_ocr_args(a)
-    a.add_argument("-o", "--output", help="출력 파일(기본: 원본에 증분 저장)")
+    a.add_argument("-o", "--output", help="출력 파일(기본: '<원본>-marked.pdf' 별도 저장)")
     a.add_argument("--dry-run", action="store_true", help="결과만 출력, 저장 안 함")
     a.set_defaults(func=cmd_apply)
 
@@ -511,5 +511,42 @@ def main():
     args.func(args)
 
 
+def selftest():
+    """파서·오프셋 핵심 로직 러너블 체크 (python3 pdf_toc.py --selftest)."""
+    # 목차 텍스트 파싱: 점선·공백 변형, 쓰레기 줄 무시
+    toc = parse_toc_text(
+        "제1장 서론 ......... 3\n"
+        "1.1 배경 · · · · 5\n"
+        "장식쪼가리\n"
+        "제2장 본론 ... 17\n"
+    )
+    assert [(t, p) for _, t, p in toc] == [("제1장 서론", 3), ("1.1 배경", 5), ("제2장 본론", 17)], toc
+
+    # 레벨 정규화: 첫 항목은 1, 점프는 +1까지
+    assert normalize_levels([[2, "a", 1], [4, "b", 2], [1, "c", 3]]) == \
+        [[1, "a", 1], [2, "b", 2], [1, "c", 3]]
+
+    # 폰트 밴드 파서·판정
+    assert parse_font_levels("36-45:1,16.5-23:2") == [(36.0, 45.0, 1), (16.5, 23.0, 2)]
+    assert level_for(40, [(36.0, 45.0, 1)]) == 1 and level_for(10, [(36.0, 45.0, 1)]) is None
+    # is_wordy는 단어문자 비율만 본다('|jlzj|D'류는 scan_by_font의 '|' 카운트가 거름)
+    assert is_wordy("제1장 서론") and not is_wordy("· · — |")
+
+    # 오프셋 자동감지: 30쪽 합성 PDF, 인쇄쪽 = 물리쪽 - 4 (연도 2026은 상수라 탈락해야)
+    doc = fitz.open()
+    for pno in range(30):
+        page = doc.new_page()
+        if pno >= 4:
+            page.insert_text((72, 800), f"{pno + 1 - 4}")
+            page.insert_text((72, 100), "2026")
+    assert detect_page_offset(doc) == 4, detect_page_offset(doc)
+    doc.close()
+    print("selftest passed")
+
+
 if __name__ == "__main__":
-    main()
+    import sys as _sys
+    if "--selftest" in _sys.argv:
+        selftest()
+    else:
+        main()
